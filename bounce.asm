@@ -21,6 +21,9 @@ MSGLEN  EQU     11              ; length of the message (excluding the 0 termina
 MAXX    EQU     32-MSGLEN       ; right-most column the text can start on
 MAXY    EQU     23              ; bottom row
 FRAMES  EQU     4               ; 50Hz frames between moves (higher = slower)
+BEEPLEN EQU     30              ; wave cycles per beep (length)
+PITCH_SIDE EQU  70              ; beep pitch for left/right walls (~1.9kHz)
+PITCH_TOP  EQU  120             ; beep pitch for top/bottom walls (~1.1kHz)
 
 start:
         xor     a
@@ -94,6 +97,8 @@ bounce_x:
         neg
         ld      (hl),a
         call    next_colour
+        ld      d,PITCH_SIDE
+        call    beep
 
 step_y:
         ld      a,(posy)
@@ -108,6 +113,8 @@ bounce_y:
         ld      a,(hl)          ; reverse vertical direction
         neg
         ld      (hl),a
+        ld      d,PITCH_TOP
+        call    beep
         ; fall through to next_colour
 
 next_colour:                    ; ink cycles 1..7 (blue .. white)
@@ -118,6 +125,32 @@ next_colour:                    ; ink cycles 1..7 (blue .. white)
         ld      a,1
 colour_ok:
         ld      (ink),a
+        ret
+
+; ---------------------------------------------------------------
+; beep: square-wave click on the speaker. D = half-period delay
+; (smaller = higher pitch). Interrupts are off while it runs so
+; the keyboard-scanning ISR can't glitch the tone. The border is
+; kept black by writing 0 / 0x10 straight to the port.
+; Corrupts A, BC.
+; ---------------------------------------------------------------
+beep:
+        di
+        ld      c,BEEPLEN       ; number of wave cycles
+beep_cycle:
+        ld      a,0x10          ; speaker bit high
+        out     (0xFE),a
+        ld      b,d
+beep_hi:
+        djnz    beep_hi
+        xor     a               ; speaker bit low
+        out     (0xFE),a
+        ld      b,d
+beep_lo:
+        djnz    beep_lo
+        dec     c
+        jr      nz,beep_cycle
+        ei
         ret
 
 ; ---------------------------------------------------------------
